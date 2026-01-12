@@ -1,0 +1,16 @@
+# Database connection
+dsn = "postgres://user:password@localhost:5432/crowlr?sslmode=disable"
+
+[crawler]
+user_agent = "Crowlr/1.0 (+https://github.com/yourname/crowlr)"
+seeds_file = "seeds.txt"
+crawl_limit = 1000
+workers = 8
+
+[politeness]
+delay = "1s"
+robots_timeout = "10s"
+
+[logging]
+level = "info"   # debug, info, warn, error
+format = "json"  # text, json

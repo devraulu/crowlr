@@ -1,0 +1,10 @@
+{{if .}} {{range .}}
+<div class="result">
+    <a href="{{.URL}}" target="_blank"
+        >{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a
+    >
+    <p class="result-snippet">{{.Snippet | safeHTML}}</p>
+</div>
+{{end}} {{else}}
+<p class="no-results">no results</p>
+{{end}}

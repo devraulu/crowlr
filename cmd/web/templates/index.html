@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>crowlr</title>
+
+        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family: Helvetica, Arial, sans-serif;
+                background: #0a0a0a;
+                color: #e0e0e0;
+                padding: 4rem 3rem;
+            }
+            h1 {
+                font-size: 2rem;
+                font-weight: 400;
+                margin-bottom: 3rem;
+            }
+            h1 a {
+                color: inherit;
+                text-decoration: none;
+            }
+            .search-box {
+                display: flex;
+                gap: 1rem;
+                margin-bottom: 3rem;
+            }
+            input {
+                font: inherit;
+                background: transparent;
+                border: none;
+                border-bottom: 1px solid #333;
+                color: #e0e0e0;
+                padding: 0.5rem 0;
+                flex: 1;
+                outline: none;
+            }
+            input[type="search"]::-webkit-search-cancel-button {
+                -webkit-appearance: none;
+                appearance: none;
+            }
+            button {
+                font: inherit;
+                background: transparent;
+                color: #666;
+                border: none;
+                cursor: pointer;
+            }
+            button:hover {
+                color: #e0e0e0;
+            }
+            .result {
+                margin-bottom: 2rem;
+            }
+            .result::after {
+                content: ".";
+                display: block;
+                margin-top: 1.5rem;
+                color: #444;
+            }
+            .result:last-child::after {
+                display: none;
+            }
+            .result a {
+                color: #e0e0e0;
+                text-decoration: none;
+                font-weight: 400;
+                display: block;
+                margin-bottom: 0.5rem;
+            }
+            .result a:hover {
+                color: #fff;
+            }
+            .result-snippet {
+                font-size: 0.85rem;
+                color: #666;
+                line-height: 1.6;
+            }
+            .result-snippet mark {
+                background: #e0e0e0;
+                color: #0a0a0a;
+            }
+            .no-results {
+                color: #444;
+            }
+        </style>
+    </head>
+    <body>
+        <h1><a href="/">crowlr</a></h1>
+        <form
+            class="search-box"
+            hx-get="/search"
+            hx-target="#results"
+            hx-trigger="submit"
+        >
+            <input type="search" name="q" placeholder="search" autofocus />
+            <button type="submit">go</button>
+        </form>
+        <div id="results"></div>
+    </body>
+</html>
