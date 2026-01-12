@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>crowlr</title>
+
+        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+        <link rel="stylesheet" href="/static/styles.css" />
+    </head>
+    <body>
+        <h1><a href="/">crowlr</a></h1>
+        <form
+            class="search-box"
+            hx-get="/search"
+            hx-target="#results"
+            hx-trigger="submit"
+        >
+            <input type="search" name="q" placeholder="SEARCH..." autofocus />
+            <button id="submit-btn" type="submit">GO</button>
+        </form>
+        <div id="results"></div>
+    </body>
+</html>

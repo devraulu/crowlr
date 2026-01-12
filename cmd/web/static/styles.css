@@ -1,0 +1,156 @@
+@font-face {
+    font-family: "Geist Mono";
+    src: url("/static/fonts/geistmono_variable_wght.ttf") format("truetype");
+    font-weight: 100 900;
+    font-style: normal;
+}
+
+:root {
+    /* Spacing - only 2 sizes */
+    --space-small: 2rem;
+    --space-large: 4rem;
+
+    /* Typography */
+    --font-family: "Geist Mono", monospace;
+    --font-size: 1rem;
+    --font-weight-light: 200;
+    --font-weight-normal: 300;
+    --font-weight-medium: 400;
+    --font-weight-semibold: 600;
+
+    /* Colors */
+    --color-background: black;
+    --color-text: white;
+    --color-text-muted: #999;
+    --color-text-subtle: #666;
+    --color-border: white;
+
+    /* Layout */
+    --container-padding: var(--space-small);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-family);
+    font-size: var(--font-size);
+    background: var(--color-background);
+    color: var(--color-text);
+    padding: var(--container-padding);
+    text-transform: lowercase;
+    font-weight: var(--font-weight-normal);
+}
+
+h1 {
+    font-size: var(--font-size);
+    font-weight: var(--font-weight-semibold);
+    margin-bottom: var(--space-large);
+}
+
+h1 a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.search-box {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-small);
+    margin-bottom: var(--space-large);
+}
+
+input {
+    font-family: inherit;
+    font-size: var(--font-size);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid var(--color-border);
+    color: var(--color-text);
+    padding: 1rem 0;
+    flex: 1;
+    outline: none;
+    text-transform: lowercase;
+    font-weight: var(--font-weight-normal);
+}
+
+input::placeholder {
+    color: var(--color-text-subtle);
+    opacity: 1;
+}
+
+input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+#submit-btn {
+    font-family: inherit;
+    font-size: var(--font-size);
+    border: 2px solid var(--color-border);
+    padding: 1rem var(--space-small);
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    text-transform: lowercase;
+    font-weight: var(--font-weight-normal);
+    transition: all 100ms ease;
+}
+
+#submit-btn:hover {
+    background: var(--color-text);
+    color: var(--color-background);
+}
+
+.results-count {
+    font-size: var(--font-size);
+    color: var(--color-text-subtle);
+    font-weight: var(--font-weight-light);
+    margin-bottom: var(--space-large);
+    text-transform: lowercase;
+}
+
+.result {
+    margin-bottom: var(--space-large);
+}
+
+.result a {
+    color: var(--color-text);
+    text-decoration: none;
+    font-weight: var(--font-weight-semibold);
+    display: block;
+    margin-bottom: var(--space-small);
+}
+
+.result a:hover {
+    font-weight: var(--font-weight-medium);
+}
+
+.result-snippet {
+    font-size: var(--font-size);
+    color: var(--color-text-muted);
+    text-transform: none;
+    font-weight: var(--font-weight-normal);
+    line-height: 1.6;
+}
+
+.result-snippet mark {
+    background: var(--color-text);
+    color: var(--color-background);
+    font-weight: var(--font-weight-semibold);
+}
+
+.result-rank {
+    font-size: var(--font-size);
+    color: var(--color-text-subtle);
+    margin-top: var(--space-small);
+    font-weight: var(--font-weight-light);
+}
+
+.no-results {
+    color: var(--color-text-subtle);
+    font-weight: var(--font-weight-normal);
+}

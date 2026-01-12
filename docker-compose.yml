@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: crowlr_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: crowlr
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: crowlr
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

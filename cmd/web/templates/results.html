@@ -1,0 +1,13 @@
+{{if .Results}}
+<div class="results-count">SHOWING {{len .Results}} OF {{.Count}} RESULTS</div>
+{{range .Results}}
+<div class="result">
+    <a href="{{.URL}}" target="_blank"
+        >{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a
+    >
+    <p class="result-snippet">{{.Snippet | safeHTML}}</p>
+    <span class="result-rank">RANK...{{printf "%.4f" .Rank}}</span>
+</div>
+{{end}} {{else}}
+<p class="no-results">NO RESULTS</p>
+{{end}}
