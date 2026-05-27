@@ -1,4 +1,4 @@
-package storage
+package crawler
 
 import (
 	"context"
@@ -7,56 +7,40 @@ import (
 	"log/slog"
 )
 
-type PostgresStorage struct {
+type PostgresStore struct {
 	db *sql.DB
 }
 
-func NewPostgresStorage(db *sql.DB) *PostgresStorage {
-	return &PostgresStorage{db: db}
+type SearchResult struct {
+	URL     string
+	Title   string
+	Snippet string
+	Rank    float64
 }
 
-func (s *PostgresStorage) SavePage(ctx context.Context, p Page) error {
-	jsonOutlinks, err := json.Marshal(p.Outlinks)
+type SearchResponse struct {
+	Results    []SearchResult
+	TotalCount int
+}
+
+func NewPostgresStore(db *sql.DB) *PostgresStore {
+	return &PostgresStore{db: db}
+}
+
+func (s *PostgresStore) SavePage(ctx context.Context, p Page) error {
+	outlinks, err := json.Marshal(p.Outlinks)
 	if err != nil {
 		return err
 	}
-
-	var id int
-	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO pages (url, normalized_url, timestamp, title, content, html, status_code, outlinks, last_modified, referrer)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		RETURNING id`,
-		p.RawURL, p.URL, p.Timestamp, p.Title, p.Content, p.HTML, p.StatusCode, jsonOutlinks, p.LastModified, p.Referrer,
-	).Scan(&id)
-
-	if err != nil {
-		return err
-	}
-
-	slog.Info("saved page", "id", id)
-	return nil
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO pages (url, raw_url, title, referrer, status_code, html, outlinks, fetched_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		p.URL, p.RawURL, p.Title, p.Referrer, p.StatusCode, p.HTML, outlinks, p.FetchedAt,
+	)
+	return err
 }
 
-func (s *PostgresStorage) SaveSitemap(ctx context.Context, sm Sitemap) error {
-	var id int
-	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO sitemaps (url, last_checked, status_code, content)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (url) DO UPDATE
-		SET last_checked = EXCLUDED.last_checked, status_code = EXCLUDED.status_code, content = EXCLUDED.content
-		RETURNING id`,
-		sm.URL, sm.LastChecked, sm.StatusCode, sm.Content,
-	).Scan(&id)
-
-	if err != nil {
-		return err
-	}
-
-	slog.Info("saved sitemap", "id", id)
-	return nil
-}
-
-func (s *PostgresStorage) Search(ctx context.Context, query string, limit int) (SearchResponse, error) {
+func (s *PostgresStore) Search(ctx context.Context, query string, limit int) (SearchResponse, error) {
 	slog.Debug("search query", "query", query, "limit", limit)
 
 	// Get total count first
@@ -111,8 +95,4 @@ func (s *PostgresStorage) Search(ctx context.Context, query string, limit int) (
 		Results:    results,
 		TotalCount: totalCount,
 	}, nil
-}
-
-func (s *PostgresStorage) Close() error {
-	return s.db.Close()
 }

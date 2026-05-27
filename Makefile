@@ -1,21 +1,18 @@
-.PHONY: dev build run clean web build-web
+.PHONY: dev build run clean web
 
 dev:
 	@$(MAKE) -s build
-	@./tmp/crawler
+	@./tmp/crawler crawl
 
 build:
-	go build -o ./tmp/crawler ./cmd/crawler/main.go
-
-build-web:
-	go build -o ./tmp/web ./cmd/web/main.go
+	go build -o ./tmp/crawler ./cmd/crawler/
 
 run:
-	./tmp/crawler
+	./tmp/crawler crawl
 
 web:
-	@$(MAKE) -s build-web
-	@./tmp/web
+	@$(MAKE) -s build
+	@./tmp/crawler web
 
 clean:
 	rm -rf ./tmp

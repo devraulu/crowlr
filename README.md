@@ -22,33 +22,33 @@ crowlr works in a similar way: it visits multiple pages at once using a pool of 
 
 ```mermaid
 flowchart TB
-    Start([Seeds]):::start -->|enqueue| Queue
+    Binary([crowlr]):::binary
 
-    Queue[Frontier<br/><br/>- BFS queue with per-host queues<br/>- thread-safe with mutex<br/>- deduplicates via seen set<br/>- crawl limit terminates program]
+    Binary -->|crawl| Seeds
+    Binary -->|web| Search
 
-    Queue -->|dequeue| Fetch
+    Seeds([seed URLs]) -->|push| Frontier
 
-    Fetch[Fetch URLs<br/><br/>- concurrent worker pool<br/>- respects robots.txt<br/>- per-host politeness delay]
+    Frontier[Frontier<br/><br/>- per-host BFS queues<br/>- seen-URL dedup<br/>- polite pop with per-host delay]
 
-    Fetch --> Parse
+    Frontier -->|next eligible URL| Workers
 
-    Parse[Parse Page<br/><br/>- validate HTML content-type<br/>- extract links from a tags<br/>- extract text content and title<br/>- normalize URLs]
+    Workers[Worker Pool<br/><br/>- concurrent fetchers<br/>- robots.txt + sitemap support<br/>- configurable count and delay]
 
-    Parse -->|new URLs| Queue
-    Parse -->|store| DB
+    Workers -->|HTML| Extract
 
-    DB[(PostgreSQL<br/><br/>- url, title, content, html<br/>- status code, outlinks<br/>- tsvector full-text index<br/>- weighted: title > url > content)]
+    Extract[Extract<br/><br/>- title from title tag<br/>- outlinks from anchor hrefs<br/>- resolve and normalize URLs]
+
+    Extract -->|new URLs| Frontier
+    Extract -->|page| DB
+
+    DB[(PostgreSQL<br/><br/>- url, title, html, outlinks<br/>- tsvector full-text index)]
 
     DB -->|full-text search| Search
 
     Search[Search UI<br/><br/>- HTMX<br/>- ts_rank_cd ranking<br/>- highlighted snippets]
 
-    Seen[Seen Set<br/><br/>- normalized URL dedup<br/>- thread-safe with mutex]
-
-    Parse -.->|check| Seen
-    Queue -.->|check| Seen
-
-    classDef start stroke:#666,stroke-width:2px
+    classDef binary stroke:#666,stroke-width:2px
 ```
 
 ## Features
@@ -86,6 +86,10 @@ make dev
 # Run search UI (separate terminal)
 make web
 # Open http://localhost:8080
+
+# Or use the binary directly
+./tmp/crawler crawl
+./tmp/crawler web --port 9000
 ```
 
 ## Configuration
@@ -99,6 +103,7 @@ See `config.example.toml` for all options.
 | `crawler.crawl_limit` | Max pages to crawl | `1000` |
 | `crawler.user_agent` | User-Agent header | - |
 | `politeness.delay` | Min delay between requests to same host | `1s` |
+| `politeness.fetch_timeout` | Max duration for an individual fetch | `10s` |
 | `logging.level` | Log level (debug, info, warn, error) | `info` |
 | `logging.format` | Log format (text, json) | `json` |
 
@@ -106,12 +111,9 @@ See `config.example.toml` for all options.
 
 ```
 cmd/
-  crawler/    # crawler binary
-  web/        # search UI binary
+  crawler/    # single binary — `crawl` and `web` subcommands
 pkg/
-  crawler/    # coordinator, workers, stats
-  process/    # HTML parsing, text extraction, normalization, robots.txt
-  storage/    # PostgreSQL with migrations and full-text search
+  crawler/    # frontier, workers, postgres store, full-text search
   config/     # TOML configuration
   logger/     # structured logging (bunyan-compatible)
 ```

@@ -1,2 +1,0 @@
-DROP TABLE IF EXISTS sitemaps;
-DROP TABLE IF EXISTS pages;

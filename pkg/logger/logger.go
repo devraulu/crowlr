@@ -3,6 +3,7 @@ package logger
 import (
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/devraulu/crowlr/pkg/config"
 )
@@ -15,7 +16,7 @@ func InitLogger(cfg *config.Config) {
 
 	var handler slog.Handler
 	opts := &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: parseLevel(cfg.Logging.Level),
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.LevelKey {
 				// Only use bunyan levels if JSON
@@ -40,6 +41,19 @@ func InitLogger(cfg *config.Config) {
 		"hostname", hostname,
 	)
 	slog.SetDefault(logger)
+}
+
+func parseLevel(s string) slog.Level {
+	switch strings.ToLower(s) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 func bunyanLevel(level slog.Level) int {

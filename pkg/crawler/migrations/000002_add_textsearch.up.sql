@@ -1,2 +1,2 @@
-DROP INDEX IF EXISTS textsearch_idx;
 ALTER TABLE pages DROP COLUMN IF EXISTS textsearch;
+DROP INDEX IF EXISTS textsearch_idx;
