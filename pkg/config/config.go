@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -22,8 +23,11 @@ type CrawlerConfig struct {
 }
 
 type PolitenessConfig struct {
-	Delay         string `toml:"delay"`
-	RobotsTimeout string `toml:"robots_timeout"`
+	Delay        string `toml:"delay"`
+	FetchTimeout string `toml:"fetch_timeout"`
+
+	delay        time.Duration
+	fetchTimeout time.Duration
 }
 
 type LoggingConfig struct {
@@ -40,6 +44,7 @@ func Load(path string) (*Config, error) {
 	var cfg Config
 	cfg.Crawler.SeedsFile = "seeds.txt"
 	cfg.Politeness.Delay = "1s"
+	cfg.Politeness.FetchTimeout = "10s"
 	cfg.Logging.Format = "text"
 	cfg.Logging.Level = "info"
 
@@ -48,13 +53,48 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
 }
 
-func (c *PolitenessConfig) GetDelay() time.Duration {
-	d, err := time.ParseDuration(c.Delay)
-	if err != nil {
-		return 1 * time.Second // Fallback
+func (c *Config) Validate() error {
+	if err := c.Politeness.Validate(); err != nil {
+		return err
 	}
-	return d
+	return nil
+}
+
+func (c *PolitenessConfig) Validate() error {
+	delay, err := parseDuration("politeness.delay", c.Delay)
+	if err != nil {
+		return err
+	}
+
+	fetchTimeout, err := parseDuration("politeness.fetch_timeout", c.FetchTimeout)
+	if err != nil {
+		return err
+	}
+
+	c.delay = delay
+	c.fetchTimeout = fetchTimeout
+	return nil
+}
+
+func (c *PolitenessConfig) GetDelay() time.Duration {
+	return c.delay
+}
+
+func (c *PolitenessConfig) GetFetchTimeout() time.Duration {
+	return c.fetchTimeout
+}
+
+func parseDuration(name, value string) (time.Duration, error) {
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s %q: %w", name, value, err)
+	}
+	return d, nil
 }

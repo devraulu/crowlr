@@ -9,7 +9,7 @@ workers = 8
 
 [politeness]
 delay = "1s"
-robots_timeout = "10s"
+fetch_timeout = "10s"
 
 [logging]
 level = "info"   # debug, info, warn, error
