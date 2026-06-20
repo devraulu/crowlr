@@ -29,14 +29,3 @@ func (w *testWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func setLogger(t testing.TB) {
-	t.Helper()
-	logSink.mu.Lock()
-	logSink.t = t
-	logSink.mu.Unlock()
-	t.Cleanup(func() {
-		logSink.mu.Lock()
-		logSink.t = nil
-		logSink.mu.Unlock()
-	})
-}
