@@ -64,6 +64,10 @@ func runWeb(cmd *cobra.Command, args []string) error {
 	}
 	slog.Debug("database connected")
 
+	if err := crawler.RunMigrations(db); err != nil {
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+
 	store := crawler.NewPostgresStore(db)
 
 	funcMap := template.FuncMap{
