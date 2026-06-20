@@ -54,18 +54,27 @@ func (f *Frontier) Peek() *Link {
 	return &first
 }
 
-func (f *Frontier) PopEligible(isEligible func(Link) bool) *Link {
+func (f *Frontier) PeekEligible(isEligible func(Link) bool) *Link {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if len(f.queue) < 1 {
-		return nil
-	}
-	for i, link := range f.queue {
+	for _, link := range f.queue {
 		if isEligible(link) {
-			f.queue = append(f.queue[:i], f.queue[i+1:]...)
-			return &link
+			l := link
+			return &l
 		}
 	}
 	return nil
+}
+
+func (f *Frontier) Remove(link Link) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for i, l := range f.queue {
+		if l.Normalized == link.Normalized {
+			f.queue = append(f.queue[:i], f.queue[i+1:]...)
+			return
+		}
+	}
 }

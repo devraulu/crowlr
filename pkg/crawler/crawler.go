@@ -168,12 +168,14 @@ func (c *Crawler) coordinator(ctx context.Context, jobs chan<- Link, out <-chan 
 		)
 
 		if c.frontier.Len() > 0 && !limitReached {
-			link := c.frontier.PopEligible(c.politeness)
+			link := c.frontier.PeekEligible(c.politeness)
 			if link != nil && c.robotsCheck(ctx, link) {
-				c.hosts[link.Host] = time.Now()
 				jobCh = jobs
 				next = *link
 			} else {
+				if link != nil {
+					c.frontier.Remove(*link)
+				}
 				retryTimer = time.After(c.crawlDelay)
 			}
 		}
@@ -184,6 +186,8 @@ func (c *Crawler) coordinator(ctx context.Context, jobs chan<- Link, out <-chan 
 			return ctx.Err()
 
 		case jobCh <- next:
+			c.frontier.Remove(next)
+			c.hosts[next.Host] = time.Now()
 			pending++
 
 		case <-retryTimer:

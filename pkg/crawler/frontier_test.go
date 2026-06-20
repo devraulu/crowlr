@@ -48,20 +48,34 @@ func TestFrontier(t *testing.T) {
 		}
 	})
 
-	t.Run("pop eligible should return if match", func(t *testing.T) {
+	t.Run("peek eligible should return if match without removing", func(t *testing.T) {
 		f := NewFrontier()
 		f.Push(exampleLink)
 
 		isEligible := func(link Link) bool {
 			return link.Normalized == exampleLink.Normalized
 		}
-		got := f.PopEligible(isEligible)
+		got := f.PeekEligible(isEligible)
 		if got == nil {
 			t.Fatal("expected eligible link, but got nil")
 		}
 
 		if *got != exampleLink {
 			t.Fatalf("got %v, but wanted %v", got, exampleLink)
+		}
+
+		if f.Len() != 1 {
+			t.Fatalf("got %v, but wanted %v", f.Len(), 1)
+		}
+	})
+
+	t.Run("remove should remove matching link", func(t *testing.T) {
+		f := NewFrontier()
+		f.Push(exampleLink)
+		f.Remove(exampleLink)
+
+		if f.Len() != 0 {
+			t.Fatalf("got %v, but wanted %v", f.Len(), 0)
 		}
 	})
 }
