@@ -116,6 +116,11 @@ type Crawler struct {
 	stats        *Stats
 }
 
+type outcome struct {
+	outlinks  []Link
+	processed bool
+}
+
 func (c *Crawler) Run(ctx context.Context, seeds []Link) error {
 	if len(seeds) == 0 {
 		return errors.New("no seeds provided")
@@ -130,62 +135,18 @@ func (c *Crawler) Run(ctx context.Context, seeds []Link) error {
 		slog.String("user_agent", c.userAgent),
 	)
 
-	type outcome struct {
-		outlinks  []Link
-		processed bool
-	}
-
 	jobs := make(chan Link, c.workers)
 	out := make(chan outcome, c.workers)
-	var retryTimer <-chan time.Time
 
 	for range c.workers {
-		go func() {
-			for link := range jobs {
-				fetchCtx := ctx
-				if c.fetchTimeout > 0 {
-					var cancel context.CancelFunc
-					fetchCtx, cancel = context.WithTimeout(ctx, c.fetchTimeout)
-					defer cancel()
-				}
-				result := c.visit(fetchCtx, link)
-				if result.Err != nil {
-					c.stats.RecordError()
-					slog.Error("visit failed", slog.String("url", link.Normalized), slog.Any("err", result.Err))
-					out <- outcome{}
-					continue
-				}
-
-				if result.Body == nil {
-					c.stats.RecordVisit(link.Host, result.StatusCode, result.Duration, result.LastModified, 0)
-					out <- outcome{}
-					continue
-				}
-
-				c.stats.RecordVisit(link.Host, result.StatusCode, result.Duration, result.LastModified, len(result.Outlinks))
-				slog.Info("visited", slog.String("url", link.Normalized), slog.Int("status", result.StatusCode), slog.Int("outlinks", len(result.Outlinks)))
-				outstrs := make([]string, len(result.Outlinks))
-				for i, ol := range result.Outlinks {
-					outstrs[i] = ol.Normalized
-				}
-
-				if err := c.store.SavePage(ctx, Page{
-					URL:        link.Normalized,
-					RawURL:     link.Original,
-					Referrer:   link.Referrer,
-					StatusCode: result.StatusCode,
-					HTML:       string(result.Body),
-					Outlinks:   outstrs,
-					FetchedAt:  time.Now(),
-					Title:      result.Title,
-				}); err != nil {
-					slog.Warn("failed to save page", slog.String("url", link.Normalized), slog.Any("err", err))
-				}
-				out <- outcome{outlinks: result.Outlinks, processed: true}
-			}
-		}()
+		go c.worker(ctx, jobs, out)
 	}
 
+	return c.coordinator(ctx, jobs, out)
+}
+
+func (c *Crawler) coordinator(ctx context.Context, jobs chan<- Link, out <-chan outcome) error {
+	var retryTimer <-chan time.Time
 	var pending, pagesProcessed int
 	for {
 		limitReached := c.crawlLimit > 0 && pagesProcessed >= c.crawlLimit
@@ -240,6 +201,55 @@ func (c *Crawler) Run(ctx context.Context, seeds []Link) error {
 				}
 			}
 		}
+	}
+}
+
+func (c *Crawler) worker(ctx context.Context, jobs <-chan Link, out chan<- outcome) {
+	for link := range jobs {
+		func(link Link) {
+			fetchCtx := ctx
+			if c.fetchTimeout > 0 {
+				var cancel context.CancelFunc
+				fetchCtx, cancel = context.WithTimeout(ctx, c.fetchTimeout)
+				defer cancel()
+			}
+
+			result := c.visit(fetchCtx, link)
+
+			if result.Err != nil {
+				c.stats.RecordError()
+				slog.Error("visit failed", slog.String("url", link.Normalized), slog.Any("err", result.Err))
+				out <- outcome{}
+				return
+			}
+
+			if result.Body == nil {
+				c.stats.RecordVisit(link.Host, result.StatusCode, result.Duration, result.LastModified, 0)
+				out <- outcome{}
+				return
+			}
+
+			c.stats.RecordVisit(link.Host, result.StatusCode, result.Duration, result.LastModified, len(result.Outlinks))
+			slog.Info("visited", slog.String("url", link.Normalized), slog.Int("status", result.StatusCode), slog.Int("outlinks", len(result.Outlinks)))
+			outstrs := make([]string, len(result.Outlinks))
+			for i, ol := range result.Outlinks {
+				outstrs[i] = ol.Normalized
+			}
+
+			if err := c.store.SavePage(ctx, Page{
+				URL:        link.Normalized,
+				RawURL:     link.Original,
+				Referrer:   link.Referrer,
+				StatusCode: result.StatusCode,
+				HTML:       string(result.Body),
+				Outlinks:   outstrs,
+				FetchedAt:  time.Now(),
+				Title:      result.Title,
+			}); err != nil {
+				slog.Warn("failed to save page", slog.String("url", link.Normalized), slog.Any("err", err))
+			}
+			out <- outcome{outlinks: result.Outlinks, processed: true}
+		}(link)
 	}
 }
 
