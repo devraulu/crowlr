@@ -12,8 +12,8 @@ import (
 	"syscall"
 
 	"github.com/devraulu/crowlr/pkg/config"
-	"github.com/devraulu/crowlr/pkg/logger"
 	"github.com/devraulu/crowlr/pkg/crawler"
+	"github.com/devraulu/crowlr/pkg/logger"
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
 )
@@ -59,7 +59,6 @@ func runCrawl(cmd *cobra.Command, _ []string) error {
 	if cmd.Flags().Changed("log-format") {
 		cfg.Logging.Format = flagLogFormat
 	}
-	logger.InitLogger(cfg)
 
 	if cmd.Flags().Changed("seeds") {
 		cfg.Crawler.SeedsFile = flagSeeds
@@ -82,6 +81,8 @@ func runCrawl(cmd *cobra.Command, _ []string) error {
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
+
+	logger.InitLogger(cfg)
 
 	seeds, err := crawler.LoadSeedsFile(cfg.Crawler.SeedsFile)
 	if err != nil {

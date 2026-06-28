@@ -154,3 +154,37 @@ input[type="search"]::-webkit-search-cancel-button {
     color: var(--color-text-subtle);
     font-weight: var(--font-weight-normal);
 }
+
+.summary-loading {
+    color: var(--color-text-subtle);
+    font-weight: var(--font-weight-light);
+    margin-bottom: var(--space-large);
+}
+
+#summary {
+    margin-bottom: var(--space-large);
+    padding-bottom: var(--space-large);
+    border-bottom: 2px solid var(--color-border);
+}
+
+.summary-text {
+    color: var(--color-text);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.6;
+    text-transform: none;
+}
+
+.summary-sources {
+    list-style: none;
+    margin-top: var(--space-small);
+}
+
+.summary-sources li {
+    font-size: var(--font-size);
+    color: var(--color-text-subtle);
+    font-weight: var(--font-weight-light);
+}
+
+.summary-sources a {
+    color: var(--color-text-subtle);
+}

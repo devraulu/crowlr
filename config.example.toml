@@ -14,3 +14,8 @@ fetch_timeout = "10s"
 [logging]
 level = "info"   # debug, info, warn, error
 format = "json"  # text, json
+
+[llm]
+ollama_url = "http://localhost:11434"
+embed_model = "nomic-embed-text"
+gen_model = "llama3.2:3b"

@@ -1,4 +1,62 @@
-{{if .Results}}
+{{if .Query}}
+<div id="summary">
+    <p id="summary-loading" class="summary-loading">GENERATING SUMMARY...</p>
+    <p id="summary-text" class="summary-text"></p>
+    <ul id="summary-sources" class="summary-sources"></ul>
+</div>
+<script>
+    (function () {
+        var loading = document.getElementById("summary-loading");
+        var textEl = document.getElementById("summary-text");
+        var sourcesEl = document.getElementById("summary-sources");
+        var started = false;
+
+        var q = {{.Query}};
+        var es = new EventSource("/summary/stream?q=" + encodeURIComponent(q));
+
+        es.onmessage = function (e) {
+            if (!started) {
+                loading.remove();
+                started = true;
+            }
+            textEl.textContent += e.data.replaceAll("\\n", "\n");
+        };
+
+        es.addEventListener("sources", function (e) {
+            JSON.parse(e.data).forEach(function (url, i) {
+                var li = document.createElement("li");
+                var a = document.createElement("a");
+                a.href = url;
+                a.target = "_blank";
+                a.textContent = url;
+                li.textContent = "[" + (i + 1) + "] ";
+                li.appendChild(a);
+                sourcesEl.appendChild(li);
+            });
+        });
+
+        es.addEventListener("summary-error", function (e) {
+            if (!started) {
+                loading.textContent = e.data;
+                started = true;
+            }
+            es.close();
+        });
+
+        es.addEventListener("done", function () {
+            es.close();
+        });
+
+        es.onerror = function () {
+            if (!started) {
+                loading.textContent = "no ai summary available.";
+                started = true;
+            }
+            es.close();
+        };
+    })();
+</script>
+{{end}} {{if .Results}}
 <div class="results-count">SHOWING {{len .Results}} OF {{.Count}} RESULTS</div>
 {{range .Results}}
 <div class="result">
