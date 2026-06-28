@@ -1,3 +1,5 @@
 seeds.txt
 config.toml
 tmp/
+
+.idea
