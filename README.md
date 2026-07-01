@@ -1,12 +1,12 @@
 # crowlr
 
-web crawler with full-text search, built in golang.
+web crawler with full-text search and RAG-powered Q&A. Crawling is built in Go for performance; the search UI, backfill (chunking/embedding), and LLM calling live in Python (`python/`).
 
 ## Overview
 
 A web crawler is a tool designed to explore the internet automatically. Beginning with a set of starting web addresses, it visits each site, collects links found on those pages, and adds them to a queue for future visits. This cycle continues, allowing the crawler to find and catalog new websites over time.
 
-crowlr works in a similar way: it visits multiple pages at once using a pool of workers, pays attention to robots.txt rules and waits between requests to avoid overloading sites, saves page data in PostgreSQL, and lets users search everything through an integrated full-text search interface.
+crowlr works in a similar way: it visits multiple pages at once using a pool of workers, pays attention to robots.txt rules and waits between requests to avoid overloading sites, and saves page data in PostgreSQL. A separate Python service backfills embeddings for crawled pages and serves a full-text search UI plus a streamed, LLM-generated summary of the top matches.
 
 ## Screenshots
 
@@ -22,10 +22,9 @@ crowlr works in a similar way: it visits multiple pages at once using a pool of 
 
 ```mermaid
 flowchart TB
-    Binary([crowlr]):::binary
+    Binary([crowlr<br/>Go]):::binary
 
     Binary -->|crawl| Seeds
-    Binary -->|web| Search
 
     Seeds([seed URLs]) -->|push| Frontier
 
@@ -42,11 +41,14 @@ flowchart TB
     Extract -->|new URLs| Frontier
     Extract -->|page| DB
 
-    DB[(PostgreSQL<br/><br/>- url, title, html, outlinks<br/>- tsvector full-text index)]
+    DB[(PostgreSQL + pgvector<br/><br/>- pages: url, title, html, outlinks<br/>- chunks: content, embedding)]
 
-    DB -->|full-text search| Search
+    Py([crowlr_py<br/>Python]):::binary
 
-    Search[Search UI<br/><br/>- HTMX<br/>- ts_rank_cd ranking<br/>- highlighted snippets]
+    DB -->|unbackfilled pages| Py
+    Py -->|chunk + embed| DB
+    DB -->|full-text + vector search| Py
+    Py -->|Search UI + SSE summary| Browser([Browser])
 
     classDef binary stroke:#666,stroke-width:2px
 ```
@@ -58,12 +60,15 @@ flowchart TB
 - Per-host politeness delays
 - URL normalization (scheme, host casing, default ports, fragments, dot segments)
 - PostgreSQL storage with full-text search (weighted tsvector: title > url > content)
-- Minimal search UI with HTMX
+- Backfill: chunks + embeds crawled pages into pgvector (Python)
+- Minimal search UI with HTMX, plus a streamed LLM summary of top results (Python)
 
 ## Requirements
 
 - Go 1.21+
-- PostgreSQL 14+ (or Docker)
+- Python 3.11+ with [uv](https://docs.astral.sh/uv/)
+- PostgreSQL 14+ with pgvector (or Docker)
+- A locally running [Ollama](https://ollama.com) with `nomic-embed-text` and `llama3.2:3b` pulled (default LLM provider; see `python/README.md`)
 
 ## Setup
 
@@ -80,42 +85,46 @@ cp config.example.toml config.toml
 cp seeds.example.txt seeds.txt
 # Add seed URLs to seeds.txt
 
-# Run crawler
-make dev
+# Crawl (Go)
+make crawl
 
-# Run search UI (separate terminal)
-make web
+# Backfill embeddings, then run the search/Q&A UI (Python)
+make py-install
+make py-backfill
+make py-web
 # Open http://localhost:8080
-
-# Or use the binary directly
-./tmp/crawler crawl
-./tmp/crawler web --port 9000
 ```
 
 ## Configuration
 
-See `config.example.toml` for all options.
+`config.toml` is shared by the Go crawler and the Python service — see `config.example.toml` for all options.
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `dsn` | PostgreSQL connection string | - |
-| `crawler.workers` | Number of concurrent workers | `8` |
-| `crawler.crawl_limit` | Max pages to crawl | `1000` |
-| `crawler.user_agent` | User-Agent header | - |
-| `politeness.delay` | Min delay between requests to same host | `1s` |
-| `politeness.fetch_timeout` | Max duration for an individual fetch | `10s` |
-| `logging.level` | Log level (debug, info, warn, error) | `info` |
-| `logging.format` | Log format (text, json) | `json` |
+| Option | Description | Default | Used by |
+|--------|-------------|---------|---------|
+| `dsn` | PostgreSQL connection string | - | Go, Python |
+| `crawler.workers` | Number of concurrent workers | `8` | Go |
+| `crawler.crawl_limit` | Max pages to crawl | `1000` | Go |
+| `crawler.user_agent` | User-Agent header | - | Go |
+| `politeness.delay` | Min delay between requests to same host | `1s` | Go |
+| `politeness.fetch_timeout` | Max duration for an individual fetch | `10s` | Go |
+| `logging.level` | Log level (debug, info, warn, error) | `info` | Go, Python |
+| `logging.format` | Log format (text, json) | `json` | Go, Python |
+| `llm.provider` | LLM provider (`ollama` for now) | `ollama` | Python |
+| `llm.ollama_url` | Ollama base URL | `http://localhost:11434` | Python |
+| `llm.embed_model` | Embedding model | `nomic-embed-text` | Python |
+| `llm.gen_model` | Generation model | `llama3.2:3b` | Python |
 
 ## Project Structure
 
 ```
 cmd/
-  crawler/    # single binary — `crawl` and `web` subcommands
+  crawler/    # Go binary — `crawl` subcommand only
 pkg/
-  crawler/    # frontier, workers, postgres store, full-text search
-  config/     # TOML configuration
+  crawler/    # frontier, workers, postgres store, full-text search, DB migrations
+  config/     # TOML configuration (crawler-relevant fields)
   logger/     # structured logging (bunyan-compatible)
+python/
+  crowlr_py/  # backfill script, LLM abstraction, web server (search UI + SSE summary)
 ```
 
 ## License

@@ -13,7 +13,6 @@ type Config struct {
 	Crawler    CrawlerConfig    `toml:"crawler"`
 	Politeness PolitenessConfig `toml:"politeness"`
 	Logging    LoggingConfig    `toml:"logging"`
-	LLM        LLMConfig        `toml:"llm"`
 }
 
 type CrawlerConfig struct {
@@ -36,12 +35,6 @@ type LoggingConfig struct {
 	Format string `toml:"format"`
 }
 
-type LLMConfig struct {
-	OllamaURL  string `toml:"ollama_url"`
-	EmbedModel string `toml:"embed_model"`
-	GenModel   string `toml:"gen_model"`
-}
-
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -54,8 +47,6 @@ func Load(path string) (*Config, error) {
 	cfg.Politeness.FetchTimeout = "10s"
 	cfg.Logging.Format = "text"
 	cfg.Logging.Level = "info"
-	cfg.LLM.EmbedModel = "nomic-embed-text"
-	cfg.LLM.GenModel = "llama3.2"
 
 	err = toml.Unmarshal(data, &cfg)
 	if err != nil {

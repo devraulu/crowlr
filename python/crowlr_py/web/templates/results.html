@@ -1,4 +1,4 @@
-{{if .Query}}
+{% if query %}
 <div id="summary">
     <p id="summary-loading" class="summary-loading">GENERATING SUMMARY...</p>
     <p id="summary-text" class="summary-text"></p>
@@ -11,7 +11,7 @@
         var sourcesEl = document.getElementById("summary-sources");
         var started = false;
 
-        var q = {{.Query}};
+        var q = {{ query | tojson }};
         var es = new EventSource("/summary/stream?q=" + encodeURIComponent(q));
 
         es.onmessage = function (e) {
@@ -56,16 +56,16 @@
         };
     })();
 </script>
-{{end}} {{if .Results}}
-<div class="results-count">SHOWING {{len .Results}} OF {{.Count}} RESULTS</div>
-{{range .Results}}
+{% endif %} {% if results %}
+<div class="results-count">SHOWING {{ results | length }} OF {{ count }} RESULTS</div>
+{% for result in results %}
 <div class="result">
-    <a href="{{.URL}}" target="_blank"
-        >{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a
+    <a href="{{ result.url }}" target="_blank"
+        >{% if result.title %}{{ result.title }}{% else %}{{ result.url }}{% endif %}</a
     >
-    <p class="result-snippet">{{.Snippet | safeHTML}}</p>
-    <span class="result-rank">RANK...{{printf "%.4f" .Rank}}</span>
+    <p class="result-snippet">{{ result.snippet | safe }}</p>
+    <span class="result-rank">RANK...{{ "%.4f" | format(result.rank) }}</span>
 </div>
-{{end}} {{else}}
+{% endfor %} {% else %}
 <p class="no-results">NO RESULTS</p>
-{{end}}
+{% endif %}
