@@ -12,14 +12,10 @@ delay = "1s"
 fetch_timeout = "10s"
 
 [logging]
-level = "info"  # debug, info, warn, error
-format = "json" # text, json
+level = "info"   # debug, info, warn, error
+format = "json"  # text, json
 
 [llm]
-provider = "ollama"
 ollama_url = "http://localhost:11434"
 embed_model = "nomic-embed-text"
-gen_model = "llama3.2:3b"
-
-[api]
-base_url = "http://localhost:8080"
+gen_model = "gpt-oss"

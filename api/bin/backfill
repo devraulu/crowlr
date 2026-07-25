@@ -1,0 +1,22 @@
+#!/usr/bin/env node
+import pool from "../db.ts";
+
+const text = `SELECT id, text, url as source, title, referrer, last_modified, fetched_at FROM pages p WHERE p.id NOT IN (SELECT DISTINCT c.page_id FROM chunks)`;
+// type Row = {
+//   id: string;
+//   text: string;
+//   source: string;
+//   title: string;
+//   referrer: string;
+//   last_modified: string;
+//   fetched_at: string;
+// };
+const pages = await pool.query(text);
+
+const documents = pages.rows.map(({ text, ...r }) => ({
+  pageContent: text,
+  metadata: { ...r },
+}));
+
+console.log({ documents });
+// vectorStore.addDocuments();

@@ -128,7 +128,8 @@ func (c *Crawler) Run(ctx context.Context, seeds []Link) error {
 	}
 
 	c.loadSeeds(seeds)
-	slog.Info("crawler starting",
+	slog.Info(
+		"crawler starting",
 		slog.Int("workers", c.workers),
 		slog.Int("seeds", len(seeds)),
 		slog.Int("crawl_limit", c.crawlLimit),
@@ -421,6 +422,7 @@ func (c *Crawler) visit(ctx context.Context, link Link) VisitResult {
 	if err != nil {
 		return VisitResult{Err: err, Duration: dur}
 	}
+	// todo: minify html
 
 	title, outlinks, text, err := extract(bytes.NewReader(body), link)
 	if err != nil {
