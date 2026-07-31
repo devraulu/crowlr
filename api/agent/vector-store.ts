@@ -1,11 +1,12 @@
 import { OllamaEmbeddings } from "@langchain/ollama";
-import { config } from "./config.ts";
+import { config } from "../config.ts";
 import { PGVectorStore, type PGVectorStoreArgs } from "@langchain/pgvector";
-import pool from "./db.ts";
+import pool from "../db.ts";
 
 const embeddings = new OllamaEmbeddings({
   model: config.llm.embed_model,
 });
+console.log("Initialized Ollama embeddings", embeddings.model);
 
 const storeConfig: PGVectorStoreArgs & {
   dimensions?: number;
@@ -23,5 +24,6 @@ const storeConfig: PGVectorStoreArgs & {
 };
 
 const vectorStore = await PGVectorStore.initialize(embeddings, storeConfig);
+console.log("Initialized vector store", vectorStore.collectionName);
 
 export default vectorStore;

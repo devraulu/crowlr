@@ -18,4 +18,5 @@ format = "json"  # text, json
 [llm]
 ollama_url = "http://localhost:11434"
 embed_model = "nomic-embed-text"
+embed_dimensions = 768
 gen_model = "gpt-oss"

@@ -296,7 +296,7 @@ func (c *Crawler) robotsCheck(ctx context.Context, link *Link) bool {
 		c.robotsCache[robotsURL] = r
 		if r != nil {
 			slog.Debug("fetched robots.txt", slog.String("url", robotsURL))
-			c.sitemaps(ctx, r)
+			// c.sitemaps(ctx, r)
 		}
 	}
 
@@ -334,7 +334,10 @@ func (c *Crawler) fetchRobots(ctx context.Context, robotsURL string) (result *ro
 }
 
 func (c *Crawler) sitemaps(ctx context.Context, r *robots.Robots) {
-	for _, sitemapURL := range r.Sitemaps()[:min(len(r.Sitemaps()), 5)] {
+	if len(r.Sitemaps()) < 1 {
+		return
+	}
+	for _, sitemapURL := range r.Sitemaps()[:1] {
 		c.fetchSitemap(ctx, sitemapURL)
 	}
 }
