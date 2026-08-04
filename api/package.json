@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node ./bin/www",
-    "backfill": "node ./bin/backfill"
+    "ingest": "tsx ./ingest"
   },
   "keywords": [],
   "author": "Raul Luis <me@rauluis.com>",
@@ -19,6 +19,7 @@
     "@langchain/pgvector": "^0.1.0",
     "@langchain/textsplitters": "^1.0.1",
     "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
     "debug": "^4.4.3",
     "deepagents": "^1.11.1",
     "express": "^5.2.1",

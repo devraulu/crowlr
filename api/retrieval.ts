@@ -48,15 +48,15 @@ export default async function retrieve(
 
     return results;
   } catch (e) {
+    throw e;
   } finally {
     await conn?.done();
   }
-  return [];
 }
 
-export const EXAMPLE_QUERY = `What are some interesting facts about wolves?`;
+export const EXAMPLE_QUESTION = `What are some interesting facts about wolves?`;
 if (import.meta.main) {
-  const res = await retrieve(EXAMPLE_QUERY, 16);
+  const res = await retrieve(EXAMPLE_QUESTION, 16);
   console.log("results", res);
   pgp.end();
   console.log("closed pg pool");

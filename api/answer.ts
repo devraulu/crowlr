@@ -1,6 +1,7 @@
+import { ChatResponse } from "ollama";
 import { config } from "./config.ts";
 import ollama from "./ollama.ts";
-import retrieve, { EXAMPLE_QUERY, MatchingChunk } from "./retrieval.ts";
+import retrieve, { EXAMPLE_QUESTION, MatchingChunk } from "./retrieval.ts";
 
 const SYSTEM_PROMPT = `You are a helpful assistant answering questions and searches about the results of crawled web pages. Answer the user's question using ONLY the provided context which matches of the user query against the fetched content.
 
@@ -27,7 +28,7 @@ function formatContext(chunks: MatchingChunk[]): string {
 async function* answer(
   q: string,
   chunks: MatchingChunk[],
-): AsyncGenerator<{ message: string; created_at: Date }> {
+): AsyncGenerator<ChatResponse> {
   const userContent = `Question:\n${q}\n\nContext:\n${formatContext(chunks)}`;
 
   const stream = await ollama.chat({
@@ -46,24 +47,22 @@ async function* answer(
   });
 
   for await (const chunk of stream) {
-    const {
-      message: { content },
-      created_at,
-    } = chunk;
-    yield { message: content, created_at };
+    yield chunk;
   }
 }
 
 if (import.meta.main) {
-  const chunks = await retrieve(EXAMPLE_QUERY, 16);
+  const chunks = await retrieve(EXAMPLE_QUESTION, 6);
   console.log("retrieved chunks", {
     count: chunks.length,
     titles: chunks.map((c) => [c.metadata.title, c.metadata.source]),
   });
-  const stream = answer(EXAMPLE_QUERY, chunks);
+  const stream = answer(EXAMPLE_QUESTION, chunks);
   process.stdout.write("Answer:\n");
   for await (const chunk of stream) {
-    process.stdout.write(chunk.message);
+    process.stdout.write(chunk.message.content);
   }
   process.stdout.write("\n");
 }
+
+export default answer;

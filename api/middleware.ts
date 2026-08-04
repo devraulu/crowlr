@@ -1,8 +1,8 @@
-import z, { ZodSchema } from "zod";
+import z, { ZodObject } from "zod";
 import { err } from "./utils/format.ts";
 import { NextFunction, Request, Response } from "express";
 
-function validate(schema: { query?: ZodSchema; body?: ZodSchema }) {
+function validate(schema: { query?: ZodObject; body?: ZodObject }) {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (schema.query) {
       const safeQuery = schema.query.safeParse(req.query);
@@ -12,7 +12,7 @@ function validate(schema: { query?: ZodSchema; body?: ZodSchema }) {
           details: z.treeifyError(safeQuery.error),
         });
       }
-      req.query = safeQuery.data;
+      req.query = safeQuery.data as any;
     }
 
     if (schema.body) {
@@ -27,6 +27,10 @@ function validate(schema: { query?: ZodSchema; body?: ZodSchema }) {
             ),
           );
       }
+      req.body = safeBody.data;
     }
+
+    next();
   };
 }
+export default validate;
