@@ -1,5 +1,5 @@
 import { createDeepAgent } from "deepagents";
-import { config } from "../config.ts";
+ 
 import { searchCrawledSet } from "./tool.ts";
 import backend from "./backend.ts";
 import { HumanMessage } from "@langchain/core/messages";
@@ -65,7 +65,7 @@ const chunkAnalystSubagent = {
 };
 
 export const agent = createDeepAgent({
-  model: "ollama:" + config.llm.gen_model,
+  model: "ollama:" + process.env.GEN_MODEL,
   tools: [searchCrawledSet],
   backend,
   systemPrompt: instructions,

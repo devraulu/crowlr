@@ -1,0 +1,19 @@
+FROM node:24-slim
+
+WORKDIR /web
+
+ENV NODE_ENV=development
+
+# RUN apt install pnpm>=11.13.0
+
+COPY package.json pnpm-lock.yaml ./
+
+RUN corepack enable
+RUN corepack prepare pnpm@latest --activate 
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["pnpm", "dev"]

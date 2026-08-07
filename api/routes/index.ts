@@ -1,125 +1,151 @@
-import express, { type Request } from "express";
+import express, {
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 import * as z from "zod";
-import validate from "../middleware";
-import answer from "../answer";
-import retrieve from "../retrieval";
+import validate from "../middleware.ts";
+import answer from "../answer.ts";
+import retrieve from "../retrieval.ts";
+import logger from "../utils/logger.ts";
+import { ApplicationError, DatabaseError } from "../utils/error.ts";
 
 const router = express.Router();
 
-const ChatQueryParams = z.object({
+const ChatBody = z.object({
   q: z.string().min(1, "Query cannot be empty."),
 });
-type ChatQueryParams = z.infer<typeof ChatQueryParams>;
+type ChatBody = z.infer<typeof ChatBody>;
 
 const TOP_K = 16;
 
 router.post(
   "/chat",
-  validate({ query: ChatQueryParams }),
-  async (req: Request<{}, {}, {}, ChatQueryParams>, res, next) => {
-    const { q } = req.query;
+  validate({ body: ChatBody }),
+  async (
+    req: Request<unknown, unknown, ChatBody, unknown>,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    logger.info("testing hi");
+    const { q } = req.body;
+    let heartbeat: NodeJS.Timeout | null = null;
 
-    const sseHeaders = new Headers({
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform", // prevents CDNs caching
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no", // prevents nginx buffering
-    });
-    res.setHeaders(sseHeaders);
-
-    // normally buffered until res.end() is called or first chunk sent,
-    // but since data is coming later we flush early
-    res.flushHeaders();
-
-    const heartbeat = setInterval(() => {
-      res.write(": hearbeat\n\n");
-    }, 15 * 1000);
-
-    req.on("close", () => clearInterval(heartbeat));
-
-    const chunks = await retrieve(q, TOP_K);
+    let chunks;
     try {
+      chunks = await retrieve(q, TOP_K);
+    } catch (err) {
+      throw new DatabaseError(
+        `Failed to retrieve search context: ${(err as Error).message}`,
+      );
+    }
+
+    try {
+      const sseHeaders = new Headers({
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform", // prevents CDNs caching
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no", // prevents nginx buffering
+      });
+      res.setHeaders(sseHeaders);
+
+      // normally buffered until res.end() is called or first chunk sent,
+      // but since data is coming later we flush early
+      res.flushHeaders();
+
+      // heartbeat to keep connection alive
+      heartbeat = setInterval(() => {
+        if (!res.writableEnded) {
+          res.write(": heartbeat\n\n");
+        }
+      }, 15 * 1000);
+      req.on("close", () => {
+        if (heartbeat) clearInterval(heartbeat);
+      });
+
       const stream = answer(q, chunks);
       let thinkingAcc = "",
-        contentAcc = "",
-        inThinking = false;
+        contentAcc = "";
+      let inThinking = false;
 
       for await (const chunk of stream) {
         const {
           message: { content, thinking },
           done,
           done_reason,
+          ...usage
         } = chunk;
 
         if (thinking) {
           if (!inThinking) {
             inThinking = true;
-
-            const data = `data: ${JSON.stringify({ type: "thinking", content })}\n\n`;
-
-            // backpressure
-            const canContinue = res.write(data);
-            if (!canContinue) {
-              await new Promise((resolve) => res.once("drain", resolve));
-            }
-            thinkingAcc += thinking;
           }
+          const data = `data: ${JSON.stringify({ type: "thinking", content: thinking })}\n\n`;
+          const canContinue = res.write(data);
+          if (!canContinue) {
+            await new Promise((resolve) => res.once("drain", resolve));
+          }
+          thinkingAcc += thinking;
         } else if (content) {
           if (inThinking) {
             inThinking = false;
           }
           const data = `data: ${JSON.stringify({ type: "content", content })}\n\n`;
-
-          // backpressure
           const canContinue = res.write(data);
           if (!canContinue) {
             await new Promise((resolve) => res.once("drain", resolve));
           }
-
           contentAcc += content;
         }
 
         if (done) {
-          // collect stats from the final chunk
-          //...
-          //{
-          //   "model": "gemma4",
-          //   "created_at": "2025-10-17T23:14:07.414671Z",
-          //   "response": "Hello! How can I help you today?",
-          //   "done": true,
-          //   "done_reason": "stop",
-          //   "total_duration": 174560334,
-          //   "load_duration": 101397084,
-          //   "prompt_eval_count": 11,
-          //   "prompt_eval_duration": 13074791,
-          //   "eval_count": 18,
-          //   "eval_duration": 52479709
-          // }
           res.write(
             `data: ${JSON.stringify({
               type: "done",
-              doneReason: done_reason,
-              usage: {},
+              done_reason,
+              usage,
             })}\n\n`,
           );
         }
       }
+
+      logger.info(
+        {
+          thinking: thinkingAcc,
+          content: contentAcc,
+        },
+        "LLM response",
+      );
     } catch (e) {
-      // TODO: research error handling approaches here
-      // do we lift? do we define a custom error class? what are Ollama errors like?
-      // do we handle the possible retrieve error? are we overthinking maybe
+      const err = e as Error;
+      logger.error({ err, query: q }, "Error in /chat route");
+
+      if (!res.headersSent) {
+        // headers not sent yet: forward to global Express error handler
+        return next(err);
+      }
+
+      // headers already sent (mid-stream error): write SSE error event
+      const isAppError = err instanceof ApplicationError;
+      const userMessage = isAppError
+        ? err.message
+        : "An unexpected error occurred while generating response.";
+
       res.write(
         `data: ${JSON.stringify({
           type: "error",
-          message: (e as any).message,
+          message: userMessage,
         })}\n\n`,
       );
-      // throw e;
-      next(e);
     } finally {
-      res.end();
+      if (heartbeat) {
+        clearInterval(heartbeat);
+      }
+      if (res.headersSent && !res.writableEnded) {
+        res.end();
+      }
     }
-    next();
   },
 );
+
 export default router;

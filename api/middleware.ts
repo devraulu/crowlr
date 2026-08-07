@@ -1,6 +1,6 @@
 import z, { ZodObject } from "zod";
 import { err } from "./utils/format.ts";
-import { NextFunction, Request, Response } from "express";
+import { type NextFunction, type Request, type Response } from "express";
 
 function validate(schema: { query?: ZodObject; body?: ZodObject }) {
   return async (req: Request, res: Response, next: NextFunction) => {

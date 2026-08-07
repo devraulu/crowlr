@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node ./bin/www",
-    "ingest": "tsx ./ingest"
+    "ingest": "tsx ./ingest",
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "keywords": [],
   "author": "Raul Luis <me@rauluis.com>",
@@ -37,6 +39,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/http-errors": "^2.0.5",
@@ -44,7 +47,11 @@
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
     "core": "link:@types/@langchain/core",
+    "eslint": "^10.8.0",
+    "eslint-config-prettier": "^10.1.8",
     "pgvector": "link:@types/@langchain/pgvector",
-    "typescript": "^7.0.2"
+    "prettier": "3.9.6",
+    "typescript": "^6.0.0",
+    "typescript-eslint": "^8.66.0"
   }
 }

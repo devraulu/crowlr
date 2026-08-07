@@ -1,18 +1,17 @@
-import { IConnected } from "pg-promise";
-import { config } from "./config";
-import ollama from "./ollama";
-import { db, pgp } from "./db";
+import { type IConnected } from "pg-promise";
+import ollama from "./ollama.ts";
+import { db, pgp } from "./db.ts";
 
 async function embedQuery(q: string): Promise<number[]> {
   const response = await ollama.embed({
-    model: config.llm.embed_model,
+    model: process.env.EMBED_MODEL || "llama3.2:3b",
     input: q,
-    dimensions: config.llm.embed_dimensions,
+    dimensions: parseInt(process.env.EMBED_DIMENSIONS || "0"),
   });
   return response.embeddings?.[0];
 }
 
-export type MatchingChunk = {
+export interface MatchingChunk {
   id: number;
   page_id: number;
   chunk_index: number;
@@ -30,7 +29,7 @@ export type MatchingChunk = {
   };
   created_at: Date;
   distance: number;
-};
+}
 
 export default async function retrieve(
   q: string,

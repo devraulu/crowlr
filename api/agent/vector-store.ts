@@ -1,10 +1,10 @@
 import { OllamaEmbeddings } from "@langchain/ollama";
-import { config } from "../config.ts";
+ 
 import { PGVectorStore, type PGVectorStoreArgs } from "@langchain/pgvector";
 import pool from "../db.ts";
 
 const embeddings = new OllamaEmbeddings({
-  model: config.llm.embed_model,
+  model: process.env.EMBED_MODEL || "llama3.2:3b",
 });
 console.log("Initialized Ollama embeddings", embeddings.model);
 

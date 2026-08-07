@@ -36,7 +36,7 @@ async function ingestDocuments(docs: Document[]) {
             const metadata = {
               ...page,
               chunker: `token_${CHUNK_SIZE}_${OVERLAP}`,
-              embed_model: config.llm.embed_model,
+              embed_model: process.env.EMBED_MODEL,
             };
 
             await t.one(
@@ -98,9 +98,9 @@ function chunkText(
 
 async function embedTexts(texts: string[]): Promise<number[][]> {
   const response = await ollama.embed({
-    model: config.llm.embed_model,
+    model: process.env.EMBED_MODEL || "llama3.2:3b",
     input: texts,
-    dimensions: config.llm.embed_dimensions,
+    dimensions: parseInt(process.env.EMBED_DIMENSIONS || "0"),
   });
   return response.embeddings;
 }

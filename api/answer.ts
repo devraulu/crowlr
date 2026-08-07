@@ -1,7 +1,6 @@
-import { ChatResponse } from "ollama";
-import { config } from "./config.ts";
+import { type ChatResponse } from "ollama";
 import ollama from "./ollama.ts";
-import retrieve, { EXAMPLE_QUESTION, MatchingChunk } from "./retrieval.ts";
+import retrieve, { EXAMPLE_QUESTION, type MatchingChunk } from "./retrieval.ts";
 
 const SYSTEM_PROMPT = `You are a helpful assistant answering questions and searches about the results of crawled web pages. Answer the user's question using ONLY the provided context which matches of the user query against the fetched content.
 
@@ -16,7 +15,7 @@ function formatContext(chunks: MatchingChunk[]): string {
 
   for (const c of chunks) {
     parts.push(
-      `\nchunk_index="${c.chunk_index}" source="${c.metadata.source}"\n${c.content}`,
+      `\nchunk_index="${c.chunk_index}" source="${c.metadata.source} chunk_id="${c.id}"\n${c.content}`,
     );
   }
 
@@ -32,7 +31,7 @@ async function* answer(
   const userContent = `Question:\n${q}\n\nContext:\n${formatContext(chunks)}`;
 
   const stream = await ollama.chat({
-    model: config.llm.gen_model || "llama3.2:3b",
+    model: process.env.GEN_MODEL || "llama3.2:3b",
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       {

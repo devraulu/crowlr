@@ -1,10 +1,11 @@
-import pino, { destination } from "pino";
-import { config } from "../config.ts";
+import pino from "pino";
+ 
+
 const transport = pino.transport({
   targets: [
     {
       target: "pino/file",
-      options: { destination: `${import.meta.dirname}/server.log` },
+      options: { destination: `${import.meta.dirname}/../server.log` },
     },
     { target: "pino-pretty" },
   ],
@@ -12,7 +13,7 @@ const transport = pino.transport({
 
 const logger = pino(
   {
-    level: config.logging.level,
+    level: process.env.LOG_LEVEL || "info",
     timestamp: pino.stdTimeFunctions.isoTime,
     redact: {
       paths: [

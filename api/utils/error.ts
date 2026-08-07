@@ -1,31 +1,75 @@
-import { NextFunction, Request, Response } from "express";
-import logger from "./logger";
+import { type NextFunction, type Request, type Response } from "express";
+import logger from "./logger.ts";
 
 export class ApplicationError extends Error {
   public readonly statusCode: number;
   public readonly status: string;
-  public readonly isOperational: boolean;
 
-  constructor(message: string, statusCode: number) {
+  constructor(message: string, statusCode = 500) {
     super(message);
     this.statusCode = statusCode;
     this.status = String(statusCode).startsWith("4") ? "fail" : "error";
-    this.isOperational = true;
 
     Error.captureStackTrace(this, this.constructor);
-
     Object.setPrototypeOf(this, ApplicationError.prototype);
+  }
+}
+
+export class BadRequestError extends ApplicationError {
+  constructor(message = "Bad Request") {
+    super(message, 400);
+  }
+}
+
+export class NotFoundError extends ApplicationError {
+  constructor(message = "Resource Not Found") {
+    super(message, 404);
+  }
+}
+
+export class DatabaseError extends ApplicationError {
+  constructor(message = "Database operation failed") {
+    super(message, 500);
+  }
+}
+
+export class AIServiceError extends ApplicationError {
+  constructor(
+    message = "AI service failed to process request",
+    statusCode = 502,
+  ) {
+    super(message, statusCode);
   }
 }
 
 interface CustomError extends Error {
   statusCode?: number;
   status?: string;
-  isOperational?: boolean;
 }
 
-export const errorHandler = (
+export const logErrors = (
   err: CustomError,
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  logger.error(
+    {
+      message: err.message,
+      statusCode: err.statusCode || 500,
+      method: req.method,
+      url: req.originalUrl,
+      stack: err.stack,
+      timestamp: new Date().toISOString(),
+    },
+    "Unhandled Application Error",
+  );
+
+  next(err);
+};
+
+export const errorHandler = (
+  err: Error | CustomError,
   req: Request,
   res: Response,
   next: NextFunction,
@@ -35,47 +79,33 @@ export const errorHandler = (
     return next(err);
   }
 
-  err.statusCode = err.statusCode || 500;
-  err.status = err.status || "error";
+  const isAppError = err instanceof ApplicationError;
+  const statusCode = isAppError
+    ? err.statusCode
+    : (err as CustomError).statusCode || 500;
+  const status = isAppError
+    ? err.status
+    : (err as CustomError).status ||
+      (String(statusCode).startsWith("4") ? "fail" : "error");
 
-  if (process.env.NODE_ENV == "development") {
-    res.status(err.statusCode || 500).json({
+  if (process.env.NODE_ENV === "development") {
+    res.status(statusCode).json({
+      status,
+      message: err.message || "Internal Server Error",
       error: err,
       stack: err.stack,
-      status: err.status,
-      message: err.message || "internal server error",
     });
-  } else if (process.env.NODE_ENV == "production") {
-    if (err.isOperational) {
-      res.status(err.statusCode).json({
-        status: err.status,
+  } else {
+    if (isAppError) {
+      res.status(statusCode).json({
+        status,
         message: err.message,
       });
     } else {
       res.status(500).json({
         status: "error",
-        message: err.message || "internal server error",
+        message: "An unexpected internal server error occurred",
       });
     }
   }
-};
-
-export const logErrors = (
-  err: Error,
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
-  logger.error(
-    {
-      message: err.message || 500,
-      method: req.method,
-      url: req.originalUrl,
-      stack: err.stack,
-      timestamp: new Date().toISOString(),
-    },
-    "error",
-  );
-
-  next(err);
 };
