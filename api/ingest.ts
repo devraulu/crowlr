@@ -1,12 +1,13 @@
-import { config } from "./config.ts";
 import { type IConnected } from "pg-promise";
 import ollama from "./ollama.ts";
 import { db, pgp } from "./db.ts";
+import type { FixLater } from "./types/index.ts";
+import logger from "./utils/logger.ts";
 
 const CHUNK_SIZE = 500;
 const OVERLAP = 20;
 
-type Document = {
+interface Document {
   content: string;
   source: string;
   title: string;
@@ -14,21 +15,21 @@ type Document = {
   last_modified: string;
   fetched_at: string;
   page_id: string;
-};
+}
 
 async function ingestDocuments(docs: Document[]) {
-  console.log("ingesting documents", { length: docs.length });
-  let conn: IConnected<{}, any> | null = null;
+  logger.info({ length: docs.length }, "ingesting documents");
+  let conn: IConnected<unknown, FixLater> | null = null;
   try {
     conn = await db.connect();
 
     for (const { content, ...page } of docs) {
       try {
         const chunkObjs = chunkText(content, CHUNK_SIZE, OVERLAP);
-        console.log("chunked text", { length: chunkObjs.length });
+        logger.info({ length: chunkObjs.length }, "chunked text");
         const chunkTexts = chunkObjs.map((c) => `search_document:` + c.content);
         const embeddings = await embedTexts(chunkTexts);
-        console.log("embeddings", { length: embeddings.length });
+        logger.info({ length: embeddings.length }, "embeddings");
 
         await conn.task(async (t) => {
           for (const [i, emb] of embeddings.entries()) {
@@ -48,22 +49,23 @@ async function ingestDocuments(docs: Document[]) {
         });
       } catch (e) {
         // TODO: handle error
-        console.error("something went wrong embedding page.", {
-          page_id: page.page_id,
-          error: e,
-        });
+
+        logger.error(e, "something went wrong embedding page.");
       } finally {
-        console.log("done embedding page", {
-          page_id: page.page_id,
-          source: page.source,
-        });
+        logger.info(
+          {
+            page_id: page.page_id,
+            source: page.source,
+          },
+          "done embedding page",
+        );
       }
     }
   } catch (e) {
-    // TODO: handle error
-    console.log("error ingesting documents", e);
+    logger.error(e, "error ingesting documents");
+    throw e;
   } finally {
-    console.log("done ingesting documents");
+    logger.info("done ingesting documents");
     if (conn) conn.done();
   }
 }
@@ -108,17 +110,20 @@ async function embedTexts(texts: string[]): Promise<number[][]> {
 if (import.meta.main) {
   let conn: IConnected<{}, any> | null = null;
   try {
+    logger.info("starting ingest");
     conn = await db.connect();
-    const query = `SELECT id as page_id, html as content, url as source, title, referrer, last_modified, fetched_at FROM pages p WHERE p.id NOT IN
+    logger.info("connected to db");
+    const query = `SELECT id as page_id, content, url as source, title, referrer, fetched_at FROM pages p WHERE p.id NOT IN
     (SELECT DISTINCT CAST(c.metadata::json ->> 'page_id' AS INTEGER) FROM chunks c)`;
-    const result = await conn.many<Document>(query);
-    await ingestDocuments(result);
+    const result = await conn?.many<Document>(query);
+    logger.info({ count: result.length }, "got results from db");
+    await ingestDocuments(result || []);
   } catch (e) {
-    // TODO: handle error
+    logger.error(e, "error ingesting documents");
   } finally {
-    console.log("done ingesting documents");
+    logger.info("done ingesting documents");
     if (conn) conn.done();
     pgp.end();
-    console.log("closed pg pool");
+    logger.info("closed pg pool");
   }
 }

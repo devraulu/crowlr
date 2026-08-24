@@ -2,13 +2,10 @@ import { type NextFunction, type Request, type Response } from "express";
 import logger from "./logger.ts";
 
 export class ApplicationError extends Error {
-  public readonly statusCode: number;
-  public readonly status: string;
-
-  constructor(message: string, statusCode = 500) {
+  constructor(message: string) {
     super(message);
-    this.statusCode = statusCode;
-    this.status = String(statusCode).startsWith("4") ? "fail" : "error";
+    // this.statusCode = statusCode;
+    // this.status = String(statusCode).startsWith("4") ? "fail" : "error";
 
     Error.captureStackTrace(this, this.constructor);
     Object.setPrototypeOf(this, ApplicationError.prototype);
@@ -17,35 +14,29 @@ export class ApplicationError extends Error {
 
 export class BadRequestError extends ApplicationError {
   constructor(message = "Bad Request") {
-    super(message, 400);
+    super(message);
   }
 }
 
 export class NotFoundError extends ApplicationError {
   constructor(message = "Resource Not Found") {
-    super(message, 404);
+    super(message);
   }
 }
 
 export class DatabaseError extends ApplicationError {
   constructor(message = "Database operation failed") {
-    super(message, 500);
+    super(message);
   }
 }
 
 export class AIServiceError extends ApplicationError {
-  constructor(
-    message = "AI service failed to process request",
-    statusCode = 502,
-  ) {
-    super(message, statusCode);
+  constructor(message = "AI service failed to process request") {
+    super(message);
   }
 }
 
-interface CustomError extends Error {
-  statusCode?: number;
-  status?: string;
-}
+export interface CustomError extends Error {}
 
 export const logErrors = (
   err: CustomError,
@@ -56,7 +47,7 @@ export const logErrors = (
   logger.error(
     {
       message: err.message,
-      statusCode: err.statusCode || 500,
+      // statusCode: err.statusCode || 500,
       method: req.method,
       url: req.originalUrl,
       stack: err.stack,
@@ -74,38 +65,46 @@ export const errorHandler = (
   res: Response,
   next: NextFunction,
 ) => {
-  // if streaming let Express handle the error
+  logger.error(
+    {
+      message: err.message || "Internal Server Error",
+      error: err,
+      stack: err.stack,
+    },
+    "An error occurred",
+  );
   if (res.headersSent) {
     return next(err);
   }
 
   const isAppError = err instanceof ApplicationError;
-  const statusCode = isAppError
-    ? err.statusCode
-    : (err as CustomError).statusCode || 500;
-  const status = isAppError
-    ? err.status
-    : (err as CustomError).status ||
-      (String(statusCode).startsWith("4") ? "fail" : "error");
 
-  if (process.env.NODE_ENV === "development") {
-    res.status(statusCode).json({
+  // const statusCode = isAppError
+  //   // ? err.statusCode
+  //   // : (err as CustomError).statusCode || 500;
+  // const status = isAppError
+  //   ? err.status
+  //   : (err as CustomError).status ||
+  //     (String(statusCode).startsWith("4") ? "fail" : "error");
+  // logger.error({ error: err }, "something went wrong");
+
+  // if (process.env.NODE_ENV === "development") {
+  //   res.status(statusCode).json({
+  //     status,
+  //     message: err.message || "Internal Server Error",
+  //     error: err,
+  //     stack: err.stack,
+  //   });
+  // } else {
+  if (isAppError) {
+    res.status(500).json({
       status,
-      message: err.message || "Internal Server Error",
-      error: err,
-      stack: err.stack,
+      message: err.message,
     });
   } else {
-    if (isAppError) {
-      res.status(statusCode).json({
-        status,
-        message: err.message,
-      });
-    } else {
-      res.status(500).json({
-        status: "error",
-        message: "An unexpected internal server error occurred",
-      });
-    }
+    res.status(500).json({
+      status: "error",
+      message: "An unexpected internal server error occurred",
+    });
   }
 };

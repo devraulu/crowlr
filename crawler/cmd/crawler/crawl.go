@@ -48,6 +48,7 @@ func init() {
 }
 
 func runCrawl(cmd *cobra.Command, _ []string) error {
+	// TODO: change to use .env file
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -108,8 +109,9 @@ func runCrawl(cmd *cobra.Command, _ []string) error {
 
 	store := crawler.NewPostgresStore(db)
 
-	client := &http.Client{}
-	c := crawler.NewCrawler(crawler.NewHTTPFetcher(client),
+	client := &http.Client{Timeout: cfg.Politeness.GetDelay()}
+	c := crawler.NewCrawler(
+		crawler.NewHTTPFetcher(client),
 		store,
 		crawler.WithUserAgent(cfg.Crawler.UserAgent),
 		crawler.WithCrawlDelay(cfg.Politeness.GetDelay()),

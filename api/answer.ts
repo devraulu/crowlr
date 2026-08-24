@@ -1,6 +1,7 @@
 import { type ChatResponse } from "ollama";
 import ollama from "./ollama.ts";
 import retrieve, { EXAMPLE_QUESTION, type MatchingChunk } from "./retrieval.ts";
+import logger from "./utils/logger.ts";
 
 const SYSTEM_PROMPT = `You are a helpful assistant answering questions and searches about the results of crawled web pages. Answer the user's question using ONLY the provided context which matches of the user query against the fetched content.
 
@@ -52,10 +53,13 @@ async function* answer(
 
 if (import.meta.main) {
   const chunks = await retrieve(EXAMPLE_QUESTION, 6);
-  console.log("retrieved chunks", {
-    count: chunks.length,
-    titles: chunks.map((c) => [c.metadata.title, c.metadata.source]),
-  });
+  logger.info(
+    {
+      count: chunks.length,
+      titles: chunks.map((c) => [c.metadata.title, c.metadata.source]),
+    },
+    "retrieved chunks",
+  );
   const stream = answer(EXAMPLE_QUESTION, chunks);
   process.stdout.write("Answer:\n");
   for await (const chunk of stream) {

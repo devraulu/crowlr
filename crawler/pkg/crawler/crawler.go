@@ -5,20 +5,24 @@ import (
 	"context"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	nurl "net/url"
+	"os"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/benjaminestes/robots"
+	"github.com/markusmobius/go-trafilatura"
 	"golang.org/x/net/html"
 )
 
 type Fetcher interface {
-	Fetch(*http.Request) (*http.Response, error)
+	Fetch(ctx context.Context, url string) (*http.Response, error)
 }
 
 type HTTPFetcher struct {
@@ -29,19 +33,31 @@ func NewHTTPFetcher(client *http.Client) *HTTPFetcher {
 	return &HTTPFetcher{client: client}
 }
 
-func (f *HTTPFetcher) Fetch(req *http.Request) (*http.Response, error) {
-	return f.client.Do(req)
-}
-
-func (c *Crawler) fetch(ctx context.Context, rawURL string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+func (f HTTPFetcher) Fetch(ctx context.Context, url string) (*http.Response, error) {
+	parsedURL, err := nurl.ParseRequestURI(url)
 	if err != nil {
 		return nil, err
 	}
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", parsedURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
-	return c.fetcher.Fetch(req)
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("non-OK response status", slog.Int("status", resp.StatusCode))
+	}
+
+	// ct := resp.Header.Get("Content-Type")
+	// if ct == "" || !strings.Contains(strings.ToLower(ct), "text/html") {
+	// 	return nil, fmt.Errorf("skipping non-HTML response")
+	// }
+
+	return resp, nil
 }
 
 type Page struct {
@@ -49,11 +65,11 @@ type Page struct {
 	RawURL     string
 	Referrer   string
 	StatusCode int
-	HTML       string
 	Outlinks   []string
 	FetchedAt  time.Time
 	Title      string
-	Text       string
+	Content    string
+	Metadata   Metadata
 }
 
 type Store interface {
@@ -224,40 +240,42 @@ func (c *Crawler) worker(ctx context.Context, jobs <-chan Link, out chan<- outco
 				defer cancel()
 			}
 
-			result := c.visit(fetchCtx, link)
-
-			if result.Err != nil {
+			result, err := c.visit(fetchCtx, link)
+			if err != nil {
 				c.stats.RecordError()
-				slog.Error("visit failed", slog.String("url", link.Normalized), slog.Any("err", result.Err))
+				slog.Error("visit failed", slog.String("url", link.Normalized), slog.Any("err", err))
 				out <- outcome{}
 				return
 			}
 
-			if result.Body == nil {
-				c.stats.RecordVisit(link.Host, result.StatusCode, result.Duration, result.LastModified, 0)
+			if strings.TrimSpace(result.Content) == "" {
+				c.stats.RecordVisit(link.Host, result.StatusCode, result.Duration, 0)
 				out <- outcome{}
 				return
 			}
 
-			c.stats.RecordVisit(link.Host, result.StatusCode, result.Duration, result.LastModified, len(result.Outlinks))
+			c.stats.RecordVisit(link.Host, result.StatusCode, result.Duration, len(result.Outlinks))
 			slog.Info("visited", slog.String("url", link.Normalized), slog.Int("status", result.StatusCode), slog.Int("outlinks", len(result.Outlinks)))
 			outstrs := make([]string, len(result.Outlinks))
 			for i, ol := range result.Outlinks {
 				outstrs[i] = ol.Normalized
 			}
 
+			var referrer string
+			if link.Referrer != nil {
+				referrer = link.Referrer.Normalized
+			}
 			if err := c.store.SavePage(ctx, Page{
 				URL:        link.Normalized,
 				RawURL:     link.Original,
-				Referrer:   link.Referrer,
+				Referrer:   referrer,
 				StatusCode: result.StatusCode,
-				HTML:       string(result.Body),
 				Outlinks:   outstrs,
 				FetchedAt:  time.Now(),
-				Title:      result.Title,
-				Text:       result.Text,
+				Content:    result.Content,
 			}); err != nil {
-				slog.Warn("failed to save page", slog.String("url", link.Normalized), slog.Any("err", err))
+				slog.Error("failed to save page", slog.String("url", link.Normalized), slog.Any("err", err))
+				os.Exit(1)
 			}
 			out <- outcome{outlinks: result.Outlinks, processed: true}
 		}(link)
@@ -315,11 +333,11 @@ func (c *Crawler) fetchRobots(ctx context.Context, robotsURL string) (result *ro
 		}
 	}()
 
-	resp, err := c.fetch(ctx, robotsURL)
+	resp, err := c.fetcher.Fetch(ctx, robotsURL)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		return nil
 	}
-	defer resp.Body.Close()
+	// defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil || len(body) == 0 {
@@ -349,8 +367,8 @@ func (c *Crawler) fetchSitemap(ctx context.Context, sitemapURL string) {
 		return
 	}
 
-	resp, err := c.fetch(ctx, sitemapURL)
-	if err != nil || resp.StatusCode != http.StatusOK {
+	resp, err := c.fetcher.Fetch(ctx, sitemapURL)
+	if err != nil {
 		return
 	}
 	defer resp.Body.Close()
@@ -388,172 +406,273 @@ func (c *Crawler) fetchSitemap(ctx context.Context, sitemapURL string) {
 	}
 }
 
-type VisitResult struct {
-	StatusCode   int
-	Body         []byte
-	Text         string
-	Outlinks     []Link
-	Title        string
-	Duration     time.Duration
-	LastModified *time.Time
-	Err          error
+type Visit struct {
+	StatusCode int
+	Content    string
+	Outlinks   []Link
+	Duration   time.Duration
+	Metadata   Metadata
 }
 
-func (c *Crawler) visit(ctx context.Context, link Link) VisitResult {
+func (c *Crawler) visit(ctx context.Context, link Link) (Visit, error) {
+	slog.Debug("visiting link", slog.String("url", link.Normalized))
 	start := time.Now()
-	resp, err := c.fetch(ctx, link.Normalized)
-	dur := time.Since(start)
+
+	resp, err := c.fetcher.Fetch(ctx, link.Normalized)
 	if err != nil {
-		return VisitResult{Err: err, Duration: dur}
+		slog.Error("fetch failed", slog.Any("error", err))
+		return Visit{Duration: time.Since(start)}, err
 	}
+	slog.Debug("got response without error", slog.String("status", resp.Status))
 	defer resp.Body.Close()
 
-	var lastMod *time.Time
-	if raw := resp.Header.Get("Last-Modified"); raw != "" {
-		if t, err := http.ParseTime(raw); err == nil {
-			lastMod = &t
-		}
-	}
-
-	ct := resp.Header.Get("Content-Type")
-	if ct != "" && !strings.Contains(strings.ToLower(ct), "text/html") {
-		slog.Debug("skipping non-HTML response", slog.String("url", link.Normalized), slog.String("content_type", ct))
-		return VisitResult{StatusCode: resp.StatusCode, Duration: dur, LastModified: lastMod}
-	}
-
 	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return VisitResult{Err: err, Duration: dur}
-	}
-	// todo: minify html
 
-	title, outlinks, text, err := extract(bytes.NewReader(body), link)
+	result, err := extract(bytes.NewReader(body), link)
 	if err != nil {
-		return VisitResult{Err: err, Duration: dur}
+		return Visit{Duration: time.Since(start)}, err
 	}
 
-	return VisitResult{
-		StatusCode:   resp.StatusCode,
-		Body:         body,
-		Outlinks:     outlinks,
-		Title:        title,
-		Duration:     dur,
-		LastModified: lastMod,
-		Text:         text,
+	return Visit{
+		Outlinks: result.links,
+		Content:  result.content,
+		Metadata: result.metadata,
+		Duration: time.Since(start),
+	}, nil
+}
+
+type Metadata struct {
+	Title       string
+	Author      string
+	URL         string
+	Hostname    string
+	Description string
+	Sitename    string
+	Date        time.Time
+	Categories  []string
+	Tags        []string
+	ID          string
+	Fingerprint string
+	License     string
+	Language    string
+	Image       string
+	PageType    string
+}
+
+func (m *Metadata) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("title", m.Title),
+		slog.String("URL", m.URL),
+	)
+}
+
+func convertMetadata(tm trafilatura.Metadata) Metadata {
+	return Metadata{
+		Title:       tm.Title,
+		Author:      tm.Author,
+		URL:         tm.URL,
+		Hostname:    tm.Hostname,
+		Description: tm.Description,
+		Sitename:    tm.Sitename,
+		Date:        tm.Date,
+		Categories:  tm.Categories,
+		Tags:        tm.Tags,
+		ID:          tm.ID,
+		Fingerprint: tm.Fingerprint,
+		License:     tm.License,
+		Language:    tm.Language,
+		Image:       tm.Image,
+		PageType:    tm.PageType,
 	}
 }
 
-func extract(r io.Reader, referrer Link) (title string, links []Link, text string, err error) {
-	base, _ := url.Parse(referrer.Normalized)
-	z := html.NewTokenizer(r)
+type Extract struct {
+	metadata Metadata
+	links    []Link
+	content  string
+}
 
-	var sb strings.Builder
-
-	skipDepth := 0
-	inTitle := false
-
-	blockTags := map[string]bool{
-		"p": true, "div": true, "br": true, "li": true, "ul": true, "ol": true,
-		"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
-		"section": true, "article": true, "header": true, "footer": true,
+func extract(r io.Reader, referrer Link) (*Extract, error) {
+	parsedURL, err := nurl.ParseRequestURI(referrer.Normalized)
+	if err != nil {
+		return nil, err
 	}
 
-	whitespace := func(s string) {
-		s = strings.TrimSpace(s)
-		if s == "" {
+	opts := trafilatura.Options{
+		EnableFallback:  true,
+		ExcludeComments: true,
+		IncludeImages:   false,
+		IncludeLinks:    true,
+		OriginalURL:     parsedURL,
+	}
+	result, err := trafilatura.Extract(r, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Debug("trafilatura result", slog.Any("metadata", result.Metadata))
+
+	return &Extract{
+		content:  result.ContentText,
+		links:    outlinks(result.ContentNode, referrer),
+		metadata: convertMetadata(result.Metadata),
+	}, nil
+}
+
+func outlinks(node *html.Node, referrer Link) (links []Link) {
+	base, err := nurl.ParseRequestURI(referrer.Normalized)
+	if err != nil {
+		slog.Debug("error parsing referrer", slog.Any("error", err))
+	}
+	var visit func(*html.Node)
+	visit = func(n *html.Node) {
+		if n == nil {
 			return
 		}
-		if sb.Len() > 0 && !strings.HasSuffix(sb.String(), " ") {
-			sb.WriteByte(' ')
-		}
-		sb.WriteString(s)
-	}
 
-	for {
-		tt := z.Next()
-		switch tt {
-		case html.ErrorToken:
-			if z.Err() == io.EOF {
-				return title, links, strings.TrimSpace(sb.String()), nil
-			}
-			return title, links, strings.TrimSpace(sb.String()), z.Err()
-
-		case html.TextToken:
-			t := string(z.Text())
-			if skipDepth > 0 {
-				continue
-			}
-			if inTitle {
-				title = strings.TrimSpace(t)
-				continue
-			}
-			whitespace(t)
-
-		case html.StartTagToken, html.SelfClosingTagToken:
-			name, hasAttr := z.TagName()
-			tag := strings.ToLower(string(name))
-
-			if tag == "script" || tag == "style" || tag == "noscript" {
-				skipDepth++
-				if tt == html.SelfClosingTagToken {
-					skipDepth--
-				}
-				continue
-			}
-
-			if tag == "title" {
-				inTitle = true
-			}
-
-			if tt == html.SelfClosingTagToken && tag == "br" {
-				sb.WriteByte('\n')
-			}
-
-			// Handle attrs (base + links)
-			if hasAttr {
-				for {
-					k, v, more := z.TagAttr()
-					kn := strings.ToLower(string(k))
-					val := string(v)
-
-					if tag == "base" && kn == "href" {
-						if newBase, err := base.Parse(val); err == nil {
-							base = newBase
-						}
+		if n.Type == html.ElementNode && n.Data == "a" {
+			for _, attr := range n.Attr {
+				if attr.Key == "href" {
+					link, err := NewLink(resolve(attr.Val, base), WithReferrer(&referrer))
+					if err != nil {
+						slog.Debug("error creating outlink", slog.Any("err", err))
 					}
-					if tag == "a" && kn == "href" {
-						if nl, err := NewLink(resolve(val, base), WithReferrer(referrer.Normalized)); err == nil {
-							links = append(links, nl)
-						}
-					}
-
-					if !more {
+					links = append(links, link)
+					break
+				} else if attr.Key == "base" && attr.Val != "" {
+					newReferrer, err := NewLink(attr.Val, WithReferrer(referrer.Referrer))
+					if err != nil {
 						break
 					}
-				}
-			}
-
-			// Insert whitespace for block tags so sentences don't glue together
-			if blockTags[tag] && (tt == html.StartTagToken) {
-				// p/div/etc. usually start a new block
-				if sb.Len() > 0 && !strings.HasSuffix(sb.String(), "\n") {
-					sb.WriteByte('\n')
-				}
-			}
-
-		case html.EndTagToken:
-			name, _ := z.TagName()
-			tag := strings.ToLower(string(name))
-			if tag == "title" {
-				inTitle = false
-			}
-			if tag == "script" || tag == "style" || tag == "noscript" {
-				if skipDepth > 0 {
-					skipDepth--
+					newBase, err := nurl.ParseRequestURI(newReferrer.Normalized)
+					if err != nil {
+						break
+					}
+					referrer = newReferrer
+					base = newBase
 				}
 			}
 		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			visit(c)
+		}
 	}
+
+	visit(node)
+	return links
+	// z := html.NewTokenizer(r)
+
+	// var sb strings.Builder
+
+	// skipDepth := 0
+	// inTitle := false
+
+	// blockTags := map[string]bool{
+	// 	"p": true, "div": true, "br": true, "li": true, "ul": true, "ol": true,
+	// 	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
+	// 	"section": true, "article": true, "header": true, "footer": true,
+	// }
+
+	// whitespace := func(s string) {
+	// 	s = strings.TrimSpace(s)
+	// 	if s == "" {
+	// 		return
+	// 	}
+	// 	if sb.Len() > 0 && !strings.HasSuffix(sb.String(), " ") {
+	// 		sb.WriteByte(' ')
+	// 	}
+	// 	sb.WriteString(s)
+	// }
+
+	// for {
+	// 	tt := z.Next()
+	// 	switch tt {
+	// 	case html.ErrorToken:
+	// 		if z.Err() == io.EOF {
+	// 			return &ExtractionResult{
+	// 				links: links, content: strings.TrimSpace(sb.String()),
+	// 			}, nil
+	// 		}
+	//
+	// 		return links, strings.TrimSpace(sb.String()), z.Err()
+	//
+	// 	case html.TextToken:
+	// 		t := string(z.Text())
+	// 		if skipDepth > 0 {
+	// 			continue
+	// 		}
+	// 		if inTitle {
+	// 			title = strings.TrimSpace(t)
+	// 			continue
+	// 		}
+	// 		whitespace(t)
+	//
+	// 	case html.StartTagToken, html.SelfClosingTagToken:
+	// 		name, hasAttr := z.TagName()
+	// 		tag := strings.ToLower(string(name))
+	//
+	// 		if tag == "script" || tag == "style" || tag == "noscript" {
+	// 			skipDepth++
+	// 			if tt == html.SelfClosingTagToken {
+	// 				skipDepth--
+	// 			}
+	// 			continue
+	// 		}
+	//
+	// 		if tag == "title" {
+	// 			inTitle = true
+	// 		}
+	//
+	// 		if tt == html.SelfClosingTagToken && tag == "br" {
+	// 			sb.WriteByte('\n')
+	// 		}
+	//
+	// 		// Handle attrs (base + links)
+	// 		if hasAttr {
+	// 			for {
+	// 				k, v, more := z.TagAttr()
+	// 				kn := strings.ToLower(string(k))
+	// 				val := string(v)
+	//
+	// 				if tag == "base" && kn == "href" {
+	// 					if newBase, err := base.Parse(val); err == nil {
+	// 						base = newBase
+	// 					}
+	// 				}
+	// 				if tag == "a" && kn == "href" {
+	// 					if nl, err := NewLink(resolve(val, base), WithReferrer(referrer.Normalized)); err == nil {
+	// 						links = append(links, nl)
+	// 					}
+	// 				}
+	//
+	// 				if !more {
+	// 					break
+	// 				}
+	// 			}
+	// 		}
+	//
+	// 		// Insert whitespace for block tags so sentences don't glue together
+	// 		if blockTags[tag] && (tt == html.StartTagToken) {
+	// 			// p/div/etc. usually start a new block
+	// 			if sb.Len() > 0 && !strings.HasSuffix(sb.String(), "\n") {
+	// 				sb.WriteByte('\n')
+	// 			}
+	// 		}
+	//
+	// 	case html.EndTagToken:
+	// 		name, _ := z.TagName()
+	// 		tag := strings.ToLower(string(name))
+	// 		if tag == "title" {
+	// 			inTitle = false
+	// 		}
+	// 		if tag == "script" || tag == "style" || tag == "noscript" {
+	// 			if skipDepth > 0 {
+	// 				skipDepth--
+	// 			}
+	// 		}
+	// 	}
+	//
+	// }
 }
 
 func resolve(ref string, base *url.URL) string {

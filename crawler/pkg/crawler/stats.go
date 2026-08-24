@@ -27,7 +27,7 @@ func NewStats() *Stats {
 	}
 }
 
-func (s *Stats) RecordVisit(host string, status int, duration time.Duration, lastModified *time.Time, outlinks int) {
+func (s *Stats) RecordVisit(host string, status int, duration time.Duration, outlinks int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.statusCodes[status]++
@@ -35,13 +35,6 @@ func (s *Stats) RecordVisit(host string, status int, duration time.Duration, las
 	s.totalOutlinks += outlinks
 	s.fetchDurSum += duration
 	s.fetchDurCount++
-	if lastModified != nil {
-		age := time.Since(*lastModified)
-		if age > 0 {
-			s.lastModSum += age
-			s.lastModCount++
-		}
-	}
 }
 
 func (s *Stats) RecordError() {

@@ -1,13 +1,14 @@
-import { Pool } from "pg";
-import pgPromise from "pg-promise";
+const { Pool } = await import("pg");
+import config from "./config.ts";
 import logger from "./utils/logger.ts";
+import pgpPromise, { type IInitOptions } from "pg-promise";
 
-const pool = new Pool({ connectionString: process.env.DSN });
-logger.info("connected to postgres database");
+const pool = new Pool({ connectionString: config.dsn });
 
-export const pgp = pgPromise({
-  query: (e) => logger.debug("query: " + e.query),
-});
-export const db = pgp(process.env.DSN || "");
+const opts: IInitOptions = {
+  // query: (e) => logger.debug("query: " + e.query),
+};
+export const pgp = pgpPromise(opts);
+export const db = pgp(config.dsn);
 
 export default pool;

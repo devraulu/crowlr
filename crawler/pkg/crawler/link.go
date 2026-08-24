@@ -9,14 +9,14 @@ import (
 
 type Link struct {
 	Original   string
-	Referrer   string
+	Referrer   *Link
 	Normalized string
 	Host       string
 }
 
 type Option func(*Link)
 
-func WithReferrer(referrer string) Option {
+func WithReferrer(referrer *Link) Option {
 	return func(l *Link) {
 		l.Referrer = referrer
 	}

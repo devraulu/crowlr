@@ -8,12 +8,17 @@ import validate from "../middleware.ts";
 import answer from "../answer.ts";
 import retrieve from "../retrieval.ts";
 import logger from "../utils/logger.ts";
-import { ApplicationError, DatabaseError } from "../utils/error.ts";
+import { ApplicationError } from "../utils/error.ts";
 
 const router = express.Router();
 
+const Message = z.object({
+  content: z.string().nonempty(),
+  role: z.string().nonempty(),
+});
+type Message = z.infer<typeof Message>;
 const ChatBody = z.object({
-  q: z.string().min(1, "Query cannot be empty."),
+  q: z.array(Message).min(1),
 });
 type ChatBody = z.infer<typeof ChatBody>;
 
@@ -27,18 +32,13 @@ router.post(
     res: Response,
     next: NextFunction,
   ) => {
-    logger.info("testing hi");
     const { q } = req.body;
     let heartbeat: NodeJS.Timeout | null = null;
 
-    let chunks;
-    try {
-      chunks = await retrieve(q, TOP_K);
-    } catch (err) {
-      throw new DatabaseError(
-        `Failed to retrieve search context: ${(err as Error).message}`,
-      );
-    }
+    const lastMessage = q.at(-1);
+    const chunks = await retrieve(lastMessage?.content || "", TOP_K);
+    logger.info({ count: chunks.length }, "retrieved chunks");
+    logger.debug({ chunks }, "retrieved chunks");
 
     try {
       const sseHeaders = new Headers({
@@ -63,7 +63,7 @@ router.post(
         if (heartbeat) clearInterval(heartbeat);
       });
 
-      const stream = answer(q, chunks);
+      const stream = answer(q?.at(-1)?.content || "", chunks);
       let thinkingAcc = "",
         contentAcc = "";
       let inThinking = false;

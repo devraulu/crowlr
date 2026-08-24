@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 import { API_URL } from "../api";
 
-interface Message {
+export interface Message {
+  id: string;
   role: "user" | "system";
   content: string;
 }
@@ -28,14 +29,18 @@ export default function useStreamingChat() {
 
     const newMessages: Message[] = [
       ...messages,
-      { role: "user", content: userMessage },
+      { id: crypto.randomUUID(), role: "user", content: userMessage },
     ];
 
-    setMessages([...newMessages, { role: "system", content: "" }]);
+    const systemMessageId = crypto.randomUUID();
+    setMessages([
+      ...newMessages,
+      { role: "system", content: "", id: systemMessageId },
+    ]);
     setState({ isStreaming: true, error: null, usage: null });
 
     try {
-      const response = await fetch(API_URL + "/api/chat", {
+      const response = await fetch(API_URL + "/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ q: newMessages }),
@@ -45,23 +50,21 @@ export default function useStreamingChat() {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      // const reader = response.body?.getReader();
-      // if (!reader) throw new Error("No response body");
       if (!response.body) throw new Error("No response body");
 
       const stream = response.body.pipeThrough(new TextDecoderStream());
 
-      // const decoder = new TextDecoder();
       let buffer = "";
       let systemMessage = "";
+      let systemThinking = "";
 
       for await (const value of stream) {
-        // const { done, value } = await reader.read();
-        // if (done) break;
         buffer += value;
-
+        console.log({ buffer });
         const lines = buffer.split("\n\n");
+        console.log({ lines });
         buffer = lines.pop() || "";
+        console.log({ buffer });
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const jsonStr = line.slice(6);
@@ -72,11 +75,13 @@ export default function useStreamingChat() {
               systemMessage += data.content;
               setMessages((prev) =>
                 prev.slice(0, -1).concat({
+                  id: systemMessageId,
                   role: "system",
                   content: systemMessage,
                 }),
               );
             } else if (data.type === "thinking") {
+              systemThinking += data.content;
             } else if (data.type === "done") {
               setState((prev) => ({
                 ...prev,
@@ -90,47 +95,12 @@ export default function useStreamingChat() {
           }
         }
       }
-
-      // while (true) {
-      //   const { done, value } = await reader.read();
-      //   if (done) break;
-      //   buffer += decoder.decode(value, { stream: true });
-      //
-      //   const lines = buffer.split("\n\n");
-      //   buffer = lines.pop() || "";
-      //   for (const line of lines) {
-      //     if (!line.startsWith("data: ")) continue;
-      //     const jsonStr = line.slice(6);
-      //     if (jsonStr === "[DONE]") continue;
-      //     try {
-      //       const data = JSON.parse(jsonStr);
-      //       if (data.type === "content") {
-      //         systemMessage += data.content;
-      //         setMessages((prev) =>
-      //           prev.slice(0, -1).concat({
-      //             role: "system",
-      //             content: systemMessage,
-      //           }),
-      //         );
-      //       } else if (data.type === "thinking") {
-      //       } else if (data.type === "done") {
-      //         setState((prev) => ({
-      //           ...prev,
-      //           usage: data.usage,
-      //         }));
-      //       } else if (data.type === "error") {
-      //         throw new Error(data.message);
-      //       }
-      //     } catch (e) {
-      //       console.warn("Failed to parse SSE message: ", line);
-      //     }
-      //   }
-      // }
     } catch (error) {
       if ((error as Error).name === "AbortError") {
         console.log("aborted");
         return;
       }
+      console.error(error);
       setState((prev) => ({ ...prev, error: (error as Error).message }));
       setMessages((prev) => prev.slice(0, -1));
     } finally {

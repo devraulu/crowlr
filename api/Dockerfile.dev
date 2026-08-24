@@ -2,7 +2,7 @@ FROM node:26-alpine
 
 WORKDIR /api
 
-ENV NODE_ENV=production
+ENV NODE_ENV=development
 
 RUN apk add --no-cache pnpm>=11.13.0 curl
 
@@ -14,4 +14,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["pnpm", "start"]
+CMD ["pnpm", "dev"]

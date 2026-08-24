@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS pages (
     title TEXT NOT NULL,
     referrer   TEXT,
     status_code INTEGER,
-    html       TEXT,
+    content TEXT NOT NULL,
     outlinks   JSONB,
     fetched_at TIMESTAMP WITH TIME ZONE,
-    last_modified TIMESTAMP WITH TIME ZONE
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );

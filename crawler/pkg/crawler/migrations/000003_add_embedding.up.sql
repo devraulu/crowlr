@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     page_id SERIAL NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
     chunk_index INT NOT NULL,
     content TEXT NOT NULL,
-    embedding vector(768) NOT NULL,
+    embedding vector(1024) NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,

@@ -32,18 +32,25 @@ func (s *PostgresStore) SavePage(ctx context.Context, p Page) error {
 	if err != nil {
 		return err
 	}
+	metadata, err := json.Marshal(p.Metadata)
+	if err != nil {
+		return err
+	}
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO pages (url, raw_url, title, referrer, status_code, html, outlinks, fetched_at, text)
+		INSERT INTO pages (url, raw_url, title, referrer, status_code, outlinks, fetched_at, content, metadata)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (url) DO UPDATE SET
+			url = EXCLUDED.url,
 			raw_url = EXCLUDED.raw_url,
 			title = EXCLUDED.title,
 			referrer = EXCLUDED.referrer,
 			status_code = EXCLUDED.status_code,
-			html = EXCLUDED.html,
+			content = EXCLUDED.content,
 			outlinks = EXCLUDED.outlinks,
-			fetched_at = EXCLUDED.fetched_at`,
-		p.URL, p.RawURL, p.Title, p.Referrer, p.StatusCode, p.HTML, outlinks, p.FetchedAt, p.Text,
+			fetched_at = EXCLUDED.fetched_at,
+			metadata = EXCLUDED.metadata;
+		`,
+		p.URL, p.RawURL, p.Title, p.Referrer, p.StatusCode, outlinks, p.FetchedAt, p.Content, metadata,
 	)
 	return err
 }
